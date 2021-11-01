@@ -15,7 +15,7 @@ import numpy as np
 from data_loader import VideoData
 from functions import *
 from networks import ResnetConditionHR, MultiscaleDiscriminator, conv_init
-from loss_functions import alpha_loss, compose_loss, alpha_gradient_loss, GANloss
+from loss_function import AlphaLoss, ComposeLoss, AlphaGradientLoss, GANloss
 
 
 #CUDA

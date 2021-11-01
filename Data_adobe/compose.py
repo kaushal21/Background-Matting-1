@@ -49,7 +49,7 @@ def format_pbar_str(i, im_name):
 def fixpath(path):
     return 'Data_adobe/' + path if not os.path.isabs(path) else path
 
-def composite4(fg, bg, a, w, h):
+def composing_image(fg, bg, a, w, h):
     bg = bg.crop((0,0,w,h))
     bg.paste(fg, mask=a)
     return bg
@@ -87,7 +87,7 @@ def process_foreground_image(i, job):
             bg = bg.resize((math.ceil(bw * ratio), math.ceil(bh * ratio)), Image.BICUBIC)
 
         try:
-            out = composite4(im, bg, al, w, h)
+            out = composing_image(im, bg, al, w, h)
             back_idx = i * num_bgs + b
             out_name = os.path.join(out_path, im_name[:len(im_name) - 4] + '_' + str(back_idx) + '_comp.png')
             out.save(out_name, "PNG")

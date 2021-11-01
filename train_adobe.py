@@ -1,182 +1,157 @@
-from __future__ import print_function
-
-import torch
-from torch.autograd import Variable
-import torch.nn as nn
-import torch.optim as optim
-from tensorboardX import SummaryWriter
-
-
+import argparse
 import os
 import time
-import argparse
 
-from data_loader import AdobeDataAffineHR
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.autograd import Variable
+
+from data_loader import AdobeData
 from functions import *
-from networks import ResnetConditionHR, conv_init
-from loss_functions import alpha_loss, compose_loss, alpha_gradient_loss
+from loss_function import AlphaLoss, ComposeLoss, AlphaGradientLoss
+from networks import Network, conv_init
 
 
-#CUDA
-
-#os.environ["CUDA_VISIBLE_DEVICES"]="4"
-print('CUDA Device: ' + os.environ["CUDA_VISIBLE_DEVICES"])
-
-
-"""Parses arguments."""
+# python train_adobe.py -n train-adobe-40 -bs 4 -res 256x256 -epoch 40 -n_blocks1 5 -n_blocks 2
 parser = argparse.ArgumentParser(description='Training Background Matting on Adobe Dataset.')
 parser.add_argument('-n', '--name', type=str, help='Name of tensorboard and model saving folders.')
 parser.add_argument('-bs', '--batch_size', type=int, help='Batch Size.')
-parser.add_argument('-res', '--reso', type=int, help='Input image resolution')
+parser.add_argument('-res', '--resolution', type=int, help='Input image resolution')
 
-parser.add_argument('-epoch', '--epoch', type=int, default=60,help='Maximum Epoch')
-parser.add_argument('-n_blocks1', '--n_blocks1', type=int, default=7,help='Number of residual blocks after Context Switching.')
-parser.add_argument('-n_blocks2', '--n_blocks2', type=int, default=3,help='Number of residual blocks for Fg and alpha each.')
+parser.add_argument('-epoch', '--epoch', type=int, default=60, help='Maximum Epoch')
+parser.add_argument('-n_blocks1', '--n_blocks1', type=int, default=5, help='Number of residual blocks after Context Switching.')
+parser.add_argument('-n_blocks2', '--n_blocks2', type=int, default=2, help='Number of residual blocks for Fg and alpha each.')
 
-args=parser.parse_args()
+args = parser.parse_args()
 
-
-##Directories
-tb_dir='TB_Summary/' + args.name
-model_dir='Models/' + args.name
+# Model Data Path
+model_dir = 'Models/' + args.name
 
 if not os.path.exists(model_dir):
-	os.makedirs(model_dir)
+    os.makedirs(model_dir)
 
-if not os.path.exists(tb_dir):
-	os.makedirs(tb_dir)
-
-## Input list
-data_config_train = {'reso': [args.reso,args.reso], 'trimapK': [5,5], 'noise': True}  # choice for data loading parameters
-
-# DATA LOADING
+############################ Loading Data ############################
 print('\n[Phase 1] : Data Preparation')
 
 def collate_filter_none(batch):
-	batch = list(filter(lambda x: x is not None, batch))
-	return torch.utils.data.dataloader.default_collate(batch)
+    batch = list(filter(lambda x: x is not None, batch))
+    return torch.utils.data.dataloader.default_collate(batch)
 
-#Original Data
-traindata =  AdobeDataAffineHR(csv_file='Data_adobe/Adobe_train_data.csv',data_config=data_config_train,transform=None)  #Write a dataloader function that can read the database provided by .csv file
+# Data Config for Data Loader
+config = {'trimapK': [5, 5], 'resolution': [args.reso, args.reso], 'noise': True}
 
-train_loader = torch.utils.data.DataLoader(traindata, batch_size=args.batch_size, shuffle=True, num_workers=args.batch_size, collate_fn=collate_filter_none)
+# Load Original Data from csv file using data loader
+traindata = AdobeData(file='Data_adobe/Adobe_train_data.csv', config=config)
 
+train_loader = torch.utils.data.DataLoader(traindata, batch_size=args.batch_size, shuffle=True,
+                                           num_workers=args.batch_size, collate_fn=collate_filter_none)
 
+############################ Initializing the Network ############################
 print('\n[Phase 2] : Initialization')
 
-net=ResnetConditionHR(input_nc=(3,3,1,4), output_nc=4, n_blocks1=7, n_blocks2=3, norm_layer=nn.BatchNorm2d)
-net.apply(conv_init)
-net=nn.DataParallel(net)
-#net.load_state_dict(torch.load(model_dir + 'net_epoch_X')) #uncomment this if you are initializing your model
-net.cuda()
-torch.backends.cudnn.benchmark=True
+network = Network(input=(3, 3, 1, 4), output=4, n_block1=5, n_block2=2, normalization=nn.BatchNorm2d)
+network.apply(conv_init)
+network = nn.DataParallel(network)
+# net.load_state_dict(torch.load(model_dir + 'net_epoch_X')) #uncomment this if you are initializing your model
+network.cuda()
+torch.backends.cudnn.benchmark = True
 
-#Loss
-l1_loss=alpha_loss()
-c_loss=compose_loss()
-g_loss=alpha_gradient_loss()
+############################ Initializing the Losses and Optimizer ############################
+alpha_loss = AlphaLoss()
+comp_loss = ComposeLoss()
+alpha_grad_loss = AlphaGradientLoss()
 
-optimizer = optim.Adam(net.parameters(), lr=1e-4)
-#optimizer.load_state_dict(torch.load(model_dir + 'optim_epoch_X')) #uncomment this if you are initializing your model
+optimizer = optim.Adam(network.parameters(), lr=1e-4)
+# optimizer.load_state_dict(torch.load(model_dir + 'optim_epoch_X')) #uncomment this if you are initializing your model
 
-
-
-log_writer=SummaryWriter(tb_dir)
-
+############################ Start Training ############################
 print('Starting Training')
-step=50 #steps to visualize training images in tensorboard
+step = 50  # steps to visualize training images in tensorboard
 
-KK=len(train_loader)
+KK = len(train_loader)
 
-for epoch in range(0,args.epoch):
+for epoch in range(0, args.epoch):
+    network.train()         # Make the network in training mode
 
-	net.train(); 
+    # Initialize the losses
+    networkLoss, alphaLoss, foregroundLoss, foregroundComposeLoss, alphaGradLoss, networkRunTime, iterationRunTime = 0, 0, 0, 0, 0, 0, 0
 
-	netL, alL, fgL, fg_cL, al_fg_cL, elapse_run, elapse=0,0,0,0,0,0,0
+    startTime = time.time()
+    testL = 0           # Loss for each epoch
+    ct_tst = 0          # Steps done in the dataloader
+    for i, data in enumerate(train_loader):
+        # Get all the images from data
+        fg = data['fg']; fg = Variable(fg.cuda())
+        bg = data['bg']; bg = Variable(bg.cuda())
+        alpha = data['alpha']; alpha = Variable(alpha.cuda())
+        image = data['image']; image = Variable(image.cuda())
+        segmentation = data['segmentation']; segmentation = Variable(segmentation.cuda())
+        bg_tr = data['bg_tr']; bg_tr = Variable(bg_tr.cuda())
 
-	t0=time.time();
-	testL=0; ct_tst=0;
-	for i,data in enumerate(train_loader):
-		#Initiating
+        mask = (alpha > -0.99).type(torch.cuda.FloatTensor)
+        mask0 = Variable(torch.ones(alpha.shape).cuda())
 
-		fg, bg, alpha, image, seg, bg_tr, multi_fr = data['fg'], data['bg'], data['alpha'], data['image'], data['seg'], data['bg_tr'], data['multi_fr']
+        networkStartTime = time.time()
 
-		fg, bg, alpha, image, seg, bg_tr, multi_fr = Variable(fg.cuda()), Variable(bg.cuda()), Variable(alpha.cuda()), Variable(image.cuda()), Variable(seg.cuda()), Variable(bg_tr.cuda()), Variable(multi_fr.cuda())
+        alpha_pred, fg_pred = network(image, bg_tr, segmentation)
 
+        # Calculate the Losses
+        al_loss = alpha_loss(alpha, alpha_pred, mask0)
+        fg_loss = alpha_loss(fg, fg_pred, mask)
 
-		mask=(alpha>-0.99).type(torch.cuda.FloatTensor)
-		mask0=Variable(torch.ones(alpha.shape).cuda())
+        # Get the alpha mask from the alpha prediction. Keep only the values greater then threshold
+        # Calculate the foreground using alpha mask
+        al_mask = (alpha_pred > 0.95).type(torch.cuda.FloatTensor)
+        fg_calc = image * al_mask + fg_pred * (1 - al_mask)
 
-		tr0=time.time()
+        # Compute Compose Loss and Alpha Gradient Loss
+        fg_calc_comp_loss = comp_loss(image, alpha_pred, fg_calc, bg, mask0)
+        al_grad_loss = alpha_grad_loss(alpha, alpha_pred, mask0)
 
-		alpha_pred,fg_pred=net(image,bg_tr,seg,multi_fr)
+        # Total Loss
+        loss = al_loss + 2 * fg_loss + fg_calc_comp_loss + al_grad_loss
 
-		## Put needed loss here
-		al_loss=l1_loss(alpha,alpha_pred,mask0)
-		fg_loss=l1_loss(fg,fg_pred,mask)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-		al_mask=(alpha_pred>0.95).type(torch.cuda.FloatTensor)
-		fg_pred_c=image*al_mask + fg_pred*(1-al_mask)
-		
-		fg_c_loss= c_loss(image,alpha_pred,fg_pred_c,bg,mask0)
+        # Update the total loss for this epoch
+        networkLoss += loss.data
+        alphaLoss += al_loss.data
+        foregroundLoss += fg_loss.data
+        foregroundComposeLoss += fg_calc_comp_loss.data
+        alphaGradLoss += al_grad_loss.data
+        testL += loss.data
+        ct_tst += 1
 
-		al_fg_c_loss=g_loss(alpha,alpha_pred,mask0)
+        # Time the run of each iteration
+        endTime = time.time()
+        iterationRunTime += endTime - startTime
+        networkRunTime += endTime - networkStartTime
+        startTime = endTime
 
-		loss=al_loss + 2*fg_loss + fg_c_loss + al_fg_c_loss
+        # Print the Losses at an interval of step
+        if i % step == (step - 1):
+            print('[', epoch + 1, ', ', i + 1, ']',
+                  ' Total-loss:  ', networkLoss / step,
+                  ' Alpha-loss: ', alphaLoss / step,
+                  ' Fg-loss: ', foregroundLoss / step,
+                  ' Comp-loss: ', foregroundComposeLoss / step,
+                  ' Alpha-gradient-loss: ', alphaGradLoss / step,
+                  ' Time-all: ', iterationRunTime / step,
+                  ' Time-fwbw: ', networkRunTime / step)
 
-		optimizer.zero_grad()
-		loss.backward()
+            networkLoss, alphaLoss, foregroundLoss, foregroundComposeLoss, alphaGradLoss, networkRunTime, iterationRunTime = 0, 0, 0, 0, 0, 0, 0
 
-		optimizer.step()
+            # Calculating the Composing image from foreground, alpha matte and background
+            alpha_pred = (alpha_pred + 1) / 2
+            comp = fg_pred * alpha_pred + (1 - alpha_pred) * bg
 
-		netL += loss.data
-		alL += al_loss.data
-		fgL += fg_loss.data
-		fg_cL += fg_c_loss.data
-		al_fg_cL += al_fg_c_loss.data
+            del comp
 
+        del fg, bg, alpha, image, alpha_pred, fg_pred, segmentation
 
-		log_writer.add_scalar('training_loss', loss.data, epoch*KK + i + 1)
-		log_writer.add_scalar('alpha_loss', al_loss.data, epoch*KK + i + 1)
-		log_writer.add_scalar('fg_loss', fg_loss.data, epoch*KK + i + 1)
-		log_writer.add_scalar('comp_loss', fg_c_loss.data, epoch*KK + i + 1)
-		log_writer.add_scalar('alpha_gradient_loss', al_fg_c_loss.data, epoch*KK + i + 1)
-
-
-		t1=time.time()
-
-		elapse +=t1 -t0
-		elapse_run += t1-tr0
-
-		t0=t1
-
-		testL+=loss.data
-		ct_tst+=1
-
-		if i % step == (step-1):
-			print('[%d, %5d] Total-loss:  %.4f Alpha-loss: %.4f Fg-loss: %.4f Comp-loss: %.4f Alpha-gradient-loss: %.4f Time-all: %.4f Time-fwbw: %.4f' % (epoch + 1, i + 1, netL/step, alL/step, fgL/step, fg_cL/step, al_fg_cL/step, elapse/step, elapse_run/step))
-			netL, alL, fgL, fg_cL, al_fg_cL, elapse_run, elapse=0,0,0,0,0,0,0
-
-			write_tb_log(image,'image',log_writer,i)
-			write_tb_log(seg,'seg',log_writer,i)
-			write_tb_log(alpha,'alpha',log_writer,i)
-			write_tb_log(alpha_pred,'alpha_pred',log_writer,i)
-			write_tb_log(fg*mask,'fg',log_writer,i)
-			write_tb_log(fg_pred*mask,'fg_pred',log_writer,i)
-			write_tb_log(multi_fr[0:4,0,...].unsqueeze(1),'multi_fr',log_writer,i)
-
-			#composition
-			alpha_pred=(alpha_pred+1)/2
-			comp=fg_pred*alpha_pred + (1-alpha_pred)*bg
-			write_tb_log(comp,'composite',log_writer,i)
-
-			del comp
-
-		del fg, bg, alpha, image, alpha_pred, fg_pred, seg, multi_fr
-
-
-	#Saving
-	torch.save(net.state_dict(), model_dir + 'net_epoch_%d_%.4f.pth' %(epoch,testL/ct_tst))
-	torch.save(optimizer.state_dict(), model_dir + 'optim_epoch_%d_%.4f.pth' %(epoch,testL/ct_tst))
-
-
+    # Saving
+    torch.save(network.state_dict(), model_dir + '/net_epoch_%d.pth' % epoch)
+    torch.save(optimizer.state_dict(), model_dir + '/optim_epoch_%d.pth' % epoch)
