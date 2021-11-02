@@ -31,7 +31,7 @@ class AdobeData(Dataset):
         try:
             # Read the Image from file, Convert it into RGB and Resize the image
             fg = cv2.imread(self.frames.iloc[item, 0]); fg = cv2.cvtColor(fg, cv2.COLOR_BGR2RGB); fg = cv2.resize(fg, dsize=(800, 800))
-            alpha = cv2.imread(self.frames.iloc[item, 1]); alpha = cv2.cvtColor(alpha, cv2.COLOR_BGR2RGB); alpha = cv2.resize(alpha, dsize=(800, 800))
+            alpha = cv2.imread(self.frames.iloc[item, 1]); alpha = cv2.cvtColor(alpha, cv2.COLOR_BGR2GRAY); alpha = cv2.resize(alpha, dsize=(800, 800))
             image = cv2.imread(self.frames.iloc[item, 2]); image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB); image = cv2.resize(image, dsize=(800, 800))
             bg = cv2.imread(self.frames.iloc[item, 3]); bg = cv2.cvtColor(bg, cv2.COLOR_BGR2RGB); bg = cv2.resize(bg, dsize=(800, 800))
 
@@ -67,10 +67,7 @@ class AdobeData(Dataset):
                     back = add_noise(bg, mean, sigma)
                 # Adjust Gamma
                 else:
-                    invGamma = 1.0 / np.random.normal(1, 0.12)
-                    table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
-
-                    back = cv2.LUT(bg, table)
+                    back = (((bg / 255.0) ** np.random.normal(1, 0.12)) * 255).astype(bg.dtype.type)
 
             # Creating motion queues for the image. Create 4 transformed images using Affine Transformation
             image_affine = np.zeros((fg.shape[0], fg.shape[1], 4))
@@ -243,7 +240,7 @@ def add_noise(background, mean, sigma):
     # Generate Gaussian Noise
     background = background.astype(np.float32)
     gaussian_noise = np.random.normal(mean, sigma, background.shape)
-    gaussian_noise = gaussian_noise.resize(background.shape)
+    gaussian_noise = gaussian_noise.reshape(background.shape)
 
     # Add the noise to the image
     noisy_image = background + gaussian_noise
@@ -312,7 +309,7 @@ def random_choice(trimap, crop=(320, 320)):
     crop_h, crop_w = crop
 
     value = np.zeros((h, w))
-    value[(crop_h / 2):(h - crop_h / 2), (crop_w / 2):(w - crop_w / 2)] = 1
+    value[int(crop_h / 2):int(h - crop_h / 2), int(crop_w / 2):int(w - crop_w / 2)] = 1
 
     y_list, x_list = np.where(np.logical_and(trimap == 128, value == 1))
     x, y = 0, 0

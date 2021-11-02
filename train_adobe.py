@@ -66,7 +66,7 @@ optimizer = optim.Adam(network.parameters(), lr=1e-4)
 # optimizer.load_state_dict(torch.load(model_dir + 'optim_epoch_X')) #uncomment this if you are initializing your model
 
 ############################ Start Training ############################
-print('Starting Training')
+print('\n[Phase 3] : Starting Training')
 step = 50  # steps to visualize training images in tensorboard
 
 KK = len(train_loader)
