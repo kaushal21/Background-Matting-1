@@ -160,9 +160,8 @@ class Network(nn.Module):
 
 class ResBLK(nn.Module):
     def __init__(self, dimension, padding, normalization, dropout, bias):
-        super(ResBLK).__init__()
+        super(ResBLK, self).__init__()
         self.convolutionBlock = self.build_convolutionBlock(dimension, padding, normalization, dropout, bias)
-        pass
 
     def build_convolutionBlock(self, dimension, padding, normalization, dropout, bias):
         block = []

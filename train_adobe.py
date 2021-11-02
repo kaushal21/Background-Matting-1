@@ -39,7 +39,7 @@ def collate_filter_none(batch):
     return torch.utils.data.dataloader.default_collate(batch)
 
 # Data Config for Data Loader
-config = {'trimapK': [5, 5], 'resolution': [args.reso, args.reso], 'noise': True}
+config = {'trimapK': [5, 5], 'resolution': [args.resolution, args.resolution], 'noise': True}
 
 # Load Original Data from csv file using data loader
 traindata = AdobeData(file='Data_adobe/Adobe_train_data.csv', config=config)

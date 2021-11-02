@@ -42,7 +42,7 @@ class AdobeData(Dataset):
                 image = cv2.flip(image, 1)
                 bg = cv2.flip(bg, 1)
 
-            trimap = generate_trimap(alpha, self.trimapK[0], self.trimapK[1], False)
+            trimap = generate_trimap(alpha, self.trimap[0], self.trimap[1], False)
 
             # To generate even more randomness, crop and scale the image randomly from the given sizes,
             # These sizes are kept similar to the original paper to make the images training and testing comparable
