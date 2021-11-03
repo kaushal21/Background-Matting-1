@@ -1,15 +1,21 @@
+# This file is kept the same as the original author's.
+# This uses deeplab segmentation for the initial mask generation of the image
+# We though of changing the segmentation style but after a discussion within the group when with the same segmenatation style.
+# We choose to proceed in this way as this gives us the same start as the original authors.
+# In this way we can compare the model changes directly.
+# If we have changed the initial segmentation then we might need to take in the segmentation effect while comparing the results as well.
+# Original Authors Link: https://github.com/senguptaumd/Background-Matting/blob/master/test_segmentation_deeplab.py
+
 import os
-from io import BytesIO
 import tarfile
-import tempfile
-from six.moves import urllib
 
+import argparse
+import cv2
+import glob
 import numpy as np
-from PIL import Image
-import cv2, pdb, glob, argparse
-
 import tensorflow as tf
-
+from PIL import Image
+from six.moves import urllib
 
 
 class DeepLabModel(object):
@@ -73,7 +79,7 @@ def create_pascal_label_colormap():
 
 	for shift in reversed(range(8)):
 		for channel in range(3):
-		  colormap[:, channel] |= ((ind >> channel) & 1) << shift
+			colormap[:, channel] |= ((ind >> channel) & 1) << shift
 		ind >>= 3
 
 	return colormap
