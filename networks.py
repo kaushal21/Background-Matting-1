@@ -228,22 +228,102 @@ def conv_init(model):
 ############################## Discriminator ##############################
 
 
-class MultiScaleDiscriminator(nn.Module):
-    def __init__(self):
-        super(MultiScaleDiscriminator).__init__()
+class WGANDiscriminator(nn.Module):
+    def __init__(self, input, ndf=46, layers=3, normalization=nn.BatchNorm2d, sigmoid=False, numD=3, getIntermediateFeat=False):
+        super(WGANDiscriminator).__init__()
         pass
+
+        self.numD = numD
+        self.layers = layers
+        self.getIntermediateFeat = getIntermediateFeat
+
+        for i in range(self.numD):
+            netD = DiscriminatorLayer(input, ndf, layers, normalization, sigmoid, getIntermediateFeat)
+            if getIntermediateFeat:
+                for j in range(layers + 2):
+                    setattr(self, 'scale' + str(i) + '_layer' + str(j), getattr(netD, 'model' + str(j)))
+            else:
+                setattr(self, 'layer' + str(i), netD.model)
+
+        self.downSample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
+
+    def fwd1(self, model, input):
+        if self.getIntermediateFeat:
+            result = [input]
+            for i in range(len(model)):
+                result.append(model[i](result[-1]))
+            return result[1:]
+        else:
+            return [model(input)]
 
     def forward(self):
-        pass
+        num_D = self.num_D
+        result = []
+        input_downSampled = input
+        for i in range(num_D):
+            if self.getIntermFeat:
+                model = [getattr(self, 'scale' + str(num_D - 1 - i) + '_layer' + str(j)) for j in
+                         range(self.n_layers + 2)]
+            else:
+                model = getattr(self, 'layer' + str(num_D - 1 - i))
+            result.append(self.fwd1(model, input_downSampled))
+            if i != (num_D - 1):
+                input_downsampled = self.downSample(input_downSampled)
+        return result
 
 
-class NLayerDiscriminator(nn.Module):
-    def __init__(self):
-        super(NLayerDiscriminator).__init__()
-        pass
+class DiscriminatorLayer(nn.Module):
+    def __init__(self, input, ndf=64, layers=3, normalization=nn.BatchNorm2d, sigmoid=False, getIntermediateFeat=False):
+        self.getIntermFeat = getIntermediateFeat
+        self.n_layers = layers
 
-    def forward(self):
-        pass
+        kw = 4
+        padw = int(np.ceil((kw - 1.0) / 2))
+        sequence = [[
+            nn.Conv2d(input, ndf, kernel_size=kw, stride=2, padding=padw),
+            nn.LeakyReLU(0.2, True)]]
+
+        nf = ndf
+        for n in range(1, layers):
+            nf_prev = nf
+            nf = min(nf * 2, 512)
+            sequence += [[
+                nn.Conv2d(nf_prev, nf, kernel_size=kw, stride=2, padding=padw),
+                normalization(nf),
+                nn.LeakyReLU(0.2, True)
+            ]]
+
+        nf_prev = nf
+        nf = min(nf * 2, 512)
+        sequence += [[
+            nn.Conv2d(nf_prev, nf, kernel_size=kw, stride=1, padding=padw),
+            normalization(nf),
+            nn.LeakyReLU(0.2, True)
+        ]]
+
+        sequence += [[nn.Conv2d(nf, 1, kernel_size=kw, stride=1, padding=padw)]]
+
+        if sigmoid:
+            sequence += [[nn.Sigmoid()]]
+
+        if getIntermediateFeat:
+            for n in range(len(sequence)):
+                setattr(self, 'model' + str(n), nn.Sequential(*sequence[n]))
+        else:
+            sequence_stream = []
+            for n in range(len(sequence)):
+                sequence_stream += sequence[n]
+            self.model = nn.Sequential(*sequence_stream)
+
+    def forward(self, input):
+        if self.getIntermFeat:
+            res = [input]
+            for n in range(self.n_layers + 2):
+                model = getattr(self, 'model' + str(n))
+                res.append(model(res[-1]))
+            return res[1:]
+        else:
+            return self.model(input)
 
 
 
