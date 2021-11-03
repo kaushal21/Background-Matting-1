@@ -1,5 +1,3 @@
-import torch.nn as nn
-from torch.nn.modules.loss import _Loss
 import argparse
 import os
 import cv2
@@ -25,22 +23,6 @@ parser.add_argument('--num_bgs', type=int, default=100, help='number of backgrou
 args = parser.parse_args()
 
 
-def file_rename(path):
-    files = os.listdir(path)
-    for n in range(0, len(files)):
-        filename = files[n]
-        new_filename = filename.replace('_comp', '_img')
-        os.rename(os.path.join(path, filename), os.path.join(path, new_filename))
-
-
-class MSELoss(_Loss):
-    def __init__(self):
-        super(MSELoss, self).__init__()
-
-    def forward(self, alpha_pred, alpha_given):
-        return nn.MSELoss(alpha_pred, alpha_given)
-
-
 def loss_MSE(ground_truth, derived_image):
     sub = np.subtract(ground_truth, derived_image)
     square = np.square(sub)
@@ -60,13 +42,11 @@ def loss_SAD(ground_truth, derived_image):
 
 # Input Data Path
 out_path, a_path, num_bgs = args.out_path, args.mask_path, args.num_bgs
-# file_rename(out_path)  # Required only when you first copied the files with the name "_comp"
 
 out_files = os.listdir(out_path)
 a_files = os.listdir(a_path)
 loss_mse = {}
 loss_sad = {}
-mse_loss = MSELoss()
 
 for n in range(0, len(out_files), 4):
     filename = out_files[n]

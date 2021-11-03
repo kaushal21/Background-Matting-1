@@ -6,17 +6,6 @@ import random
 import cv2
 
 
-class VideoData(Dataset):
-    def __init__(self):
-        pass
-
-    def __len__(self):
-        pass
-
-    def __getitem__(self, item):
-        pass
-
-
 class AdobeData(Dataset):
     def __init__(self, file, config):
         self.frames = pd.read_csv(file, sep=';')

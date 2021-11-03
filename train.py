@@ -8,12 +8,11 @@ import torch.optim as optim
 from torch.autograd import Variable
 
 from data_loader import AdobeData
-from functions import *
 from loss_function import AlphaLoss, ComposeLoss, AlphaGradientLoss
 from networks import Network, conv_init
 
 
-# python train_adobe.py -n train-adobe-40 -bs 4 -res 256x256 -epoch 40 -n_blocks1 5 -n_blocks 2
+# python train.py -n train-adobe-40 -bs 4 -res 256x256 -epoch 40 -n_blocks1 5 -n_blocks 2
 parser = argparse.ArgumentParser(description='Training Background Matting on Adobe Dataset.')
 parser.add_argument('-n', '--name', type=str, help='Name of tensorboard and model saving folders.')
 parser.add_argument('-bs', '--batch_size', type=int, help='Batch Size.')
