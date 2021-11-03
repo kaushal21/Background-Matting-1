@@ -27,7 +27,7 @@ from networks import Network
 #	  3.9 Un-crop the images / resize them to the original size
 #	  3.10 Save the all the output images
 
-# python generate_output_images.py -m train-adobe-40 -i data/input -o data/output -tb data/bg/001.png
+# Runnable Command: python generate_output_images.py -m train-adobe-40 -i data/input -o data/output -tb data/bg/001.png
 parser = argparse.ArgumentParser(
     description='Runs the model on the given inputs to generate new output with background matting.')
 
@@ -55,7 +55,6 @@ input_img.sort()
 bg_img = cv2.imread(args.target_back); bg_img = cv2.cvtColor(bg_img, cv2.COLOR_BGR2RGB)
 # New blank green-screen background with size similar to target background
 green_bg = np.zeros(bg_img.shape)
-green_bg[..., 0] = 120; green_bg[..., 1] = 255; green_bg[..., 2] = 155
 
 # Creating Output Directory
 if not os.path.exists(result_path):
@@ -141,16 +140,13 @@ for i in range(0, len(input_img)):
 
 	# Resize the images to the original sizes
 	bg_img = cv2.resize(bg_img, (C, R))
-	green_bg = cv2.resize(green_bg, (C, R))
 
 	# Compose Image using the equation for fg, bg and alpha
 	composite_image = composing_image(fg_out, bg_img, alpha_out)
-	composite_image_green_back = composing_image(fg_out, green_bg, alpha_out)
 
 	# Save the images i.e, composite image, foreground, segmentation mask, alpha matte
 	cv2.imwrite(result_path + '/' + filename.replace('_img', '_out'), alpha_out)
 	cv2.imwrite(result_path + '/' + filename.replace('_img', '_fg'), cv2.cvtColor(fg_out, cv2.COLOR_BGR2RGB))
 	cv2.imwrite(result_path + '/' + filename.replace('_img', '_compose'), cv2.cvtColor(composite_image, cv2.COLOR_BGR2RGB))
-	cv2.imwrite(result_path + '/' + filename.replace('_img', '_matte').format(i), cv2.cvtColor(composite_image_green_back, cv2.COLOR_BGR2RGB))
 
 	print('Done: ' + str(i + 1) + '/' + str(len(input_img)))

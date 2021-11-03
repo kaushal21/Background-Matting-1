@@ -29,7 +29,7 @@ Functionality of each file can be summarized as:
 2. functions.py: Consider this file as a helper file. It holds several functions that helps in performing tasks like cropping images, getting bounding box, etc
 3. loss_function.py: This holds in all the loss that we calculate for this project. Losses like Alpha loss, compose loss and GAN loss
 4. network.py: The complete network architecture is within this file. Network, ResBLK are within this file
-5. generate_output_images.py: We pass on input images with target background to this file which used a pretrained model to generate a final output. It produces 4 output images, which are the foreground, alpha, a green background alpha matte and a final composed image.
+5. generate_output_images.py: We pass on input images with target background to this file which used a pretrained model to generate a final output. It produces 3 output images, which are the foreground, alpha and a final composed image.
 6. train.py: This is the training file, it calls in the data_loader to load the data, trains the network over it and saves a model using losses from loss_functions
 7. testing.py: For testing we used the merged dataset that we generated using Adobe Matting Dataset and MS-COCO. We calculate MSE and SAD score for a given model
 

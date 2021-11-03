@@ -14,7 +14,7 @@ import numpy as np
 #       Thus pass --testing as true to only generate the alpha output
 # 5. Call the testing.py on the outputs generated to calculate the MSE and SAD score for the model
 
-# python testing.py --out_path test/output --mask_path Data_adobe/mask_test
+# Runnable Command: python testing.py --out_path test/output --mask_path Data_adobe/mask_test
 parser = argparse.ArgumentParser(description='compute loss on predicted images from the model')
 
 parser.add_argument('--out_path', type=str, required=True, help='path to generated alpha mattes')

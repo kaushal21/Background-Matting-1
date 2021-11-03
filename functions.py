@@ -1,5 +1,4 @@
 import numpy as np
-import torchvision
 import cv2
 
 
